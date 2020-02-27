@@ -2,15 +2,15 @@
 #include <HighPowerStepperDriver.h>
 #include "TeensyThreads.h"
 
+uint8_t HomingPin = 7;
+uint8_t HomingPwr = 8;
 const uint8_t CSPinM1 = 10; //Pin 4 on nano every
-const uint8_t CSPinM2 = 9;
 const uint8_t FaultPin = 2; //currently unused
 const uint8_t StallPin = 2; //currently unused
 
 const double degrees_per_step = 1.8;
 const double microstep = 2; //2^1, n = 0 - 8 //was 4
 const double degreesM1 = 360;
-const double degreesM2 = 360;
 const double gear_ratio = 46.656; //old stepper motor gear ratio was 4.25
 
 // This period is the length of the delay between steps, which controls the
@@ -29,7 +29,10 @@ void setup()
   
   SPI.begin();
   
-  digitalWrite(SleepPin, HIGH);
+  //digitalWrite(SleepPin, HIGH);
+  pinMode(HomingPwr, OUTPUT);
+  PinMode(HomingPin, INPUT);
+  digitalWrite(HomingPwr, HIGH);
   sd.setChipSelectPin(CSPinM1); //when writing to a new CSPin, does this function set an already active CSPin low?
   Serial.println("Initializing driver");
 
