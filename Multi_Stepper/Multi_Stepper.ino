@@ -4,20 +4,19 @@
 
 #define MOTOR_COUNT 2
 
-const uint8_t CSPinM1 = 10; //Pin 4 on nano every
+const uint8_t CSPinM1 = 10;
 const uint8_t CSPinM2 = 9;
-const uint8_t FaultPin = 2; //currently unused
-const uint8_t StallPin = 2; //currently unused
-const uint8_t HomingPin = 7;
+//const uint8_t FaultPin = 2;
+//const uint8_t StallPin = 2;
+const uint8_t HomingPinM0 = 7;
 
 const double degrees_per_step = 1.8;
 const double microstep = 4; //2^1, n = 0 - 8 //was 4
-const double degreesM0 = 180;
-const double degreesM1 = -160;
-const double gear_ratio = 46.656; //old stepper motor gear ratio was 4.25
+const double degreesM0 = 360;
+const double degreesM1 = -330;
+const double gear_ratio = 46.656;
 
-const double StepPeriodUs = 200; //best value so far 800
-const uint16_t StepPeriodMs = 1; //was 2
+const double StepPeriodUs = 200;
 
 double stepper_degrees[MOTOR_COUNT] = {degreesM0, degreesM1};
 double stepper_degrees_R[MOTOR_COUNT] = {-degreesM0, -degreesM1};
@@ -25,7 +24,7 @@ double stepper_degrees_R[MOTOR_COUNT] = {-degreesM0, -degreesM1};
 HighPowerStepperDriver sd0;
 HighPowerStepperDriver sd1;
 
-HighPowerStepperDriver sd[MOTOR_COUNT] = {sd0, sd1};
+HighPowerStepperDriver sd[MOTOR_COUNT] = {sd0, sd1}; //!!!this array is repetitive since sd_ptr exists.  Should edit
 HighPowerStepperDriver *sd_ptr[MOTOR_COUNT] = {&sd0, &sd1};
 
 void setup()
@@ -35,12 +34,12 @@ void setup()
   
   SPI.begin();
 
-  pinMode(HomingPin,INPUT);
+  pinMode(HomingPinM0,INPUT);
   //pinMode(SleepPin, OUTPUT);
   //digitalWrite(SleepPin, HIGH);
   sd0.setChipSelectPin(CSPinM1);
   sd1.setChipSelectPin(CSPinM2);
-  Serial.println("Initializing driver");
+  Serial.println("Initializing drivers");
 
   // Give the driver some time to power up.
   delay(1);
@@ -49,7 +48,7 @@ void setup()
   sd0.clearStatus();
   sd1.resetSettings();
   sd1.clearStatus();
-
+  //!!!setDecayMode and setCurrentMilliamps36v4 could be put in a for loop
   sd0.setDecayMode(HPSDDecayMode::AutoMixed);
   sd1.setDecayMode(HPSDDecayMode::AutoMixed);
 
@@ -79,6 +78,8 @@ void setup()
     Serial.print(" ");
   }
   Serial.println();
+
+  //!!!most of these stepper config functions can be placed in a single for loop
   
   // Set the number of microsteps that correspond to one full step.
   for(int i=0; i < MOTOR_COUNT; i++){
@@ -145,15 +146,27 @@ void turn_degrees(HighPowerStepperDriver *sd_ptr[], double stepper_degrees[]){
       sd_ptr[i]->setDirection(1);
     }
   }
-  int m1_finished = 0;
-  int m2_finished = 0;
   for(int i = 0; i <= max_steps; i++)
   {
+
+    for(int j=0; j < MOTOR_COUNT; j++){
+      if(i < steps[j]){
+        sd_ptr[j]->step();
+      }
+      else if(i == steps[j]){
+        Serial.print("M");
+        Serial.print(j);
+        Serial.print(" reached target rotation at ");
+        Serial.print(i);
+        Serial.println(" steps");
+      }
+    }
+    
+    /*
     if(i < steps[0]){
       sd0.step();
     }
-    else if(!m1_finished){
-      m1_finished = true;
+    else if(i == steps[0]){
       Serial.print("M0 reached target rotation at ");
       Serial.print(i);
       Serial.println(" steps");
@@ -161,16 +174,17 @@ void turn_degrees(HighPowerStepperDriver *sd_ptr[], double stepper_degrees[]){
     if(i < steps[1]){
       sd1.step();
     }
-    else if(!m2_finished){
-      m2_finished = true;
+    else if(i == steps[1]){
       Serial.println("M1 reached target rotation");
       Serial.print(i);
       Serial.println(" steps");
     }
-
-    if(digitalRead(HomingPin)){
+    */
+/*
+    if(digitalRead(HomingPinM0)){
       Serial.println("HOMING SWITCH TRIGGERED");
     }
+    */
     delayMicroseconds(StepPeriodUs);
   }
 }
