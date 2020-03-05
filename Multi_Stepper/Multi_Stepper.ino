@@ -3,6 +3,7 @@
 #include "TeensyThreads.h"
 
 #define MOTOR_COUNT 2
+#define CURRENT_LIMIT 2800 //steppers are rated for 2.8A max continuous current
 
 const uint8_t CSPinM1 = 10;
 const uint8_t CSPinM2 = 9;
@@ -12,8 +13,8 @@ const uint8_t HomingPinM0 = 7;
 
 const double degrees_per_step = 1.8;
 const double microstep = 4; //2^1, n = 0 - 8 //was 4
-const double degreesM0 = 360;
-const double degreesM1 = -330;
+const double degreesM0 = 180;
+const double degreesM1 = -90;
 const double gear_ratio = 46.656;
 
 const double StepPeriodUs = 200;
@@ -23,8 +24,6 @@ double stepper_degrees_R[MOTOR_COUNT] = {-degreesM0, -degreesM1};
 
 HighPowerStepperDriver sd0;
 HighPowerStepperDriver sd1;
-
-HighPowerStepperDriver sd[MOTOR_COUNT] = {sd0, sd1}; //!!!this array is repetitive since sd_ptr exists.  Should edit
 HighPowerStepperDriver *sd_ptr[MOTOR_COUNT] = {&sd0, &sd1};
 
 void setup()
@@ -42,18 +41,7 @@ void setup()
   Serial.println("Initializing drivers");
 
   // Give the driver some time to power up.
-  delay(1);
-
-  sd0.resetSettings();
-  sd0.clearStatus();
-  sd1.resetSettings();
-  sd1.clearStatus();
-  //!!!setDecayMode and setCurrentMilliamps36v4 could be put in a for loop
-  sd0.setDecayMode(HPSDDecayMode::AutoMixed);
-  sd1.setDecayMode(HPSDDecayMode::AutoMixed);
-
-  sd0.setCurrentMilliamps36v4(2800); //steppers are rated for 2.8 max continuous current
-  sd1.setCurrentMilliamps36v4(2800);
+  delay(100);
 
   //Print Stepper config data, such as microsteps, step delay, gear ratio, and predicted RPM
   Serial.print("microstep: ");
@@ -78,17 +66,20 @@ void setup()
     Serial.print(" ");
   }
   Serial.println();
-
-  //!!!most of these stepper config functions can be placed in a single for loop
   
   // Set the number of microsteps that correspond to one full step.
   for(int i=0; i < MOTOR_COUNT; i++){
-    sd[i].setStepMode(microstep);
+    sd_ptr[i]->resetSettings();
+    sd_ptr[i]->clearStatus();
+    sd_ptr[i]->setDecayMode(HPSDDecayMode::AutoMixed);
+    sd_ptr[i]->setCurrentMilliamps36v4(CURRENT_LIMIT); 
+    sd_ptr[i]->setStepMode(microstep);
+    sd_ptr[i]->enableDriver();
   }
 
   // Enable the motor outputs.
   for(int i=0; i < MOTOR_COUNT; i++){
-    sd[i].enableDriver();
+    sd_ptr[i]->enableDriver();
   }
   Serial.println("Drivers enabled\n");
   
@@ -161,30 +152,9 @@ void turn_degrees(HighPowerStepperDriver *sd_ptr[], double stepper_degrees[]){
         Serial.println(" steps");
       }
     }
-    
-    /*
-    if(i < steps[0]){
-      sd0.step();
-    }
-    else if(i == steps[0]){
-      Serial.print("M0 reached target rotation at ");
-      Serial.print(i);
-      Serial.println(" steps");
-    }
-    if(i < steps[1]){
-      sd1.step();
-    }
-    else if(i == steps[1]){
-      Serial.println("M1 reached target rotation");
-      Serial.print(i);
-      Serial.println(" steps");
-    }
-    */
-/*
     if(digitalRead(HomingPinM0)){
       Serial.println("HOMING SWITCH TRIGGERED");
     }
-    */
     delayMicroseconds(StepPeriodUs);
   }
 }
