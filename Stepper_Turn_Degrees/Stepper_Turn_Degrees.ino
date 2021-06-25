@@ -2,11 +2,11 @@
 #include <HighPowerStepperDriver.h>
 #include "TeensyThreads.h"
 
-uint8_t HomingPin = 7;
-uint8_t HomingPwr = 8;
-const uint8_t CSPinM1 = 10; //Pin 4 on nano every
-const uint8_t FaultPin = 2; //currently unused
-const uint8_t StallPin = 2; //currently unused
+uint8_t HomingPin = 32;
+const uint8_t sleepPin = 14;
+const uint8_t CSPinM1 = 29; //Pin 4 on nano every
+const uint8_t FaultPin = 30; //currently unused
+const uint8_t StallPin = 31; //currently unused
 
 const double degrees_per_step = 1.8;
 const double microstep = 2; //2^1, n = 0 - 8 //was 4
@@ -30,9 +30,11 @@ void setup()
   SPI.begin();
   
   //digitalWrite(SleepPin, HIGH);
-  pinMode(HomingPwr, OUTPUT);
-  PinMode(HomingPin, INPUT);
-  digitalWrite(HomingPwr, HIGH);
+  pinMode(HomingPin, INPUT);
+
+   pinMode(sleepPin, OUTPUT);
+   digitalWrite(sleepPin, HIGH);
+  
   sd.setChipSelectPin(CSPinM1); //when writing to a new CSPin, does this function set an already active CSPin low?
   Serial.println("Initializing driver");
 
