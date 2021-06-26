@@ -31,7 +31,7 @@ const uint16_t StepPeriodMs = 1; //was 2
 
 bool isHomed=false;
 
-HighPowerStepperDriver sd;
+HighPowerStepperDriver drivers[4];
 
 Threads::Mutex stepLock;
 
@@ -90,7 +90,7 @@ void home_all(){
     for(int i = 0; i < 4; i++){
       if(homed[i]==false){
         if(digitalRead(homingPins[i]) == 0){
-          turn_degrees(2, CSPins[i]);
+          threads.addThread(turn_degrees, new int[2]{2, i});
         }
         else{
           homed[i] = true;
@@ -105,7 +105,7 @@ void home_all(){
 void align_all(uint8_t degs[]){
 
   for(int i = 0; i<4; i++){
-    turn_degrees(degs[i]-currentPositions[i], CSPins[i]);
+    threads.addThread(turn_degrees, new int[2]{degs[i]-currentPositions[i], i});
 
     currentPositions[i] = degs[i];
   }
@@ -124,38 +124,41 @@ void send_msg(String msg, bool terminate){
   }
 }
 
-void turn_degrees(int degrees, int CSPin){
+void turn_degrees(int* args){
+  int degrees = args[0];
+  int driverNum = args[1];
   double steps = abs(degrees/(degrees_per_step/(gear_ratio*microstep)));
   if(degrees>=0){
-    sd.setDirection(0);
+    drivers[driverNum].setDirection(0);
   }
   else{
-    sd.setDirection(1);
+    drivers[driverNum].setDirection(1);
   }
   for(unsigned int x = 0; x <= steps; x++)
   {
-    Threads::Scope m(stepLock);
-    sd.setChipSelectPin(CSPin);
-    sd.step();
+    drivers[driverNum].step();
     delayMicroseconds(StepPeriodUs);
   }
 }
 
-void init_drivers(int CSPin, int homingPin){
-    pinMode(homingPin, INPUT);
+
+void init_drivers(){
+  for(int i = 0; i < 4; i++){
+    pinMode(homingPins[i], INPUT);
   
-    sd.setChipSelectPin(CSPin); 
+    drivers[i].setChipSelectPin(CSPins[i]); 
     delay(1);
-    sd.resetSettings();
-    sd.clearStatus();
-    sd.setDecayMode(HPSDDecayMode::AutoMixed);
-    sd.setCurrentMilliamps36v4(2800); //4000 max
+    drivers[i].resetSettings();
+    drivers[i].clearStatus();
+    drivers[i].setDecayMode(HPSDDecayMode::AutoMixed);
+    drivers[i].setCurrentMilliamps36v4(2800); //4000 max
     double steps_approx = abs(degreesM1/(degrees_per_step/(gear_ratio*microstep)));
     double time_approx = (steps_approx*StepPeriodUs)/1000000;
     float rpm_approx = (60/time_approx)*degreesM1/float(360);  
-    sd.setStepMode(microstep);
+    drivers[i].setStepMode(microstep);
     
-    sd.enableDriver();
+    drivers[i].enableDriver();
+  }
 }
 
 void setup() {
@@ -172,9 +175,7 @@ void setup() {
   pinMode(sleepPin, OUTPUT);
   digitalWrite(sleepPin, HIGH);
 
-  for(int i = 0; i < 4; i++){
-    init_drivers(CSPins[i], homingPins[i]);
-  }
+  init_drivers();
   
 //  pinMode(FaultPin, INPUT);
 //  pinMode(StallPin, INPUT);
