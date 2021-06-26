@@ -36,7 +36,6 @@ while True:
 		left_back = int(input("left back angle:"))
 		right_back = int(input("right back angle:"))
 		cmd = encodeAlignCommand(left_front, right_front, left_back, right_back)
-		print(cmd)
 	
 	if user_cmd == "blink":
 		cmd = encodeBlink(4)

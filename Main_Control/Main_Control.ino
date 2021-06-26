@@ -33,6 +33,8 @@ bool isHomed=false;
 
 HighPowerStepperDriver sd;
 
+Threads::Mutex stepLock;
+
 void recieve_command(){
   while(1){ 
     if(Serial.available() > 0) {
@@ -41,12 +43,12 @@ void recieve_command(){
       switch(read_byte){
         case 0x1:
           send_msg("init cmd recieved", false);
-          init_all();
+          home_all();
           send_msg("init_all processed");
           break;
 
         case 0x2:
-          send_msg("align_cmd_recieved", false);
+          
           uint8_t degs[4];
           for(int i = 0; i < 4; i++){
             while(Serial.available() < 1){}
@@ -56,7 +58,7 @@ void recieve_command(){
           }
 
           align_all(degs);
-          
+          send_msg("align_cmd_recieved");
           break;
           
         case 0x6:
@@ -81,7 +83,7 @@ void recieve_command(){
   }
 }
 
-void init_all(){
+void home_all(){
   bool homed[4] = {false, false, false, false};
 
   while(std::accumulate(homed, homed + 4, 0) < 4){
@@ -101,17 +103,11 @@ void init_all(){
 }
 
 void align_all(uint8_t degs[]){
-  while(!twoArrEqual(degs, currentPositions)){
-    for(int i = 0; i < 4; i++){
-      if(degs[i]<currentPositions[i]){
-        turn_degrees(-1, CSPins[i]);
-        currentPositions[i]--;
-      }
-      else if(degs[i]>currentPositions[i]){
-        turn_degrees(1, CSPins[i]);
-        currentPositions[i]++;
-      }
-    }
+
+  for(int i = 0; i<4; i++){
+    turn_degrees(degs[i]-currentPositions[i], CSPins[i]);
+
+    currentPositions[i] = degs[i];
   }
 }
 
@@ -121,7 +117,7 @@ void send_msg(String msg){
 
 void send_msg(String msg, bool terminate){
   if(!terminate){
-    Serial.print(msg);
+    Serial.print(msg + '\n');
   }
   else{
     Serial.print(msg + '\0');
@@ -129,7 +125,6 @@ void send_msg(String msg, bool terminate){
 }
 
 void turn_degrees(int degrees, int CSPin){
-  sd.setChipSelectPin(CSPin);
   double steps = abs(degrees/(degrees_per_step/(gear_ratio*microstep)));
   if(degrees>=0){
     sd.setDirection(0);
@@ -139,6 +134,8 @@ void turn_degrees(int degrees, int CSPin){
   }
   for(unsigned int x = 0; x <= steps; x++)
   {
+    Threads::Scope m(stepLock);
+    sd.setChipSelectPin(CSPin);
     sd.step();
     delayMicroseconds(StepPeriodUs);
   }
@@ -196,6 +193,5 @@ bool twoArrEqual(uint8_t arr1[], uint8_t arr2[])
 
 void loop() {
   // put your main code here, to run repeatedly:
-  Serial.println("waiting on command");
   recieve_command();
 }
