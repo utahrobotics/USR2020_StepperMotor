@@ -5,6 +5,7 @@
 uint8_t HomingPin = 32;
 const uint8_t sleepPin = 14;
 const uint8_t CSPinM1 = 29; //Pin 4 on nano every
+const uint8_t CSPinM2 = 36; //Pin 4 on nano every
 const uint8_t FaultPin = 30; //currently unused
 const uint8_t StallPin = 31; //currently unused
 
@@ -17,10 +18,11 @@ const double gear_ratio = 46.656; //old stepper motor gear ratio was 4.25
 // stepper motor's speed.  You can increase the delay to make the stepper motor
 // go slower.  If you decrease the delay, the stepper motor will go faster, but
 // there is a limit to how fast it can go before it starts missing steps.
-const double StepPeriodUs = 500; //best value so far 800
+const double StepPeriodUs = 400; //best value so far 800
 const uint16_t StepPeriodMs = 1; //was 2
 
-HighPowerStepperDriver sd;
+HighPowerStepperDriver sd1;
+HighPowerStepperDriver sd2;
 
 void setup()
 {
@@ -35,7 +37,7 @@ void setup()
    pinMode(sleepPin, OUTPUT);
    digitalWrite(sleepPin, HIGH);
   
-  sd.setChipSelectPin(CSPinM1); //when writing to a new CSPin, does this function set an already active CSPin low?
+  sd1.setChipSelectPin(CSPinM1); //when writing to a new CSPin, does this function set an already active CSPin low?
   Serial.println("Initializing driver");
 
   // Give the driver some time to power up.
@@ -43,16 +45,16 @@ void setup()
 
   // Reset the driver to its default settings and clear latched status
   // conditions.
-  sd.resetSettings();
-  sd.clearStatus();
+  sd1.resetSettings();
+  sd1.clearStatus();
 
   // Select auto mixed decay.  TI's DRV8711 documentation recommends this mode
   // for most applications, and we find that it usually works well.
-  sd.setDecayMode(HPSDDecayMode::AutoMixed);
+  sd1.setDecayMode(HPSDDecayMode::AutoMixed);
 
   // Set the current limit. You should change the number here to an appropriate
   // value for your particular system.
-  sd.setCurrentMilliamps36v4(2800); //4000 max
+  sd1.setCurrentMilliamps36v4(2800); //4000 max
 
   // Set the number of microsteps that correspond to one full step.
 
@@ -75,67 +77,72 @@ void setup()
   Serial.print("Approximate rpm: ");
   Serial.println(rpm_approx);
   
-  sd.setStepMode(microstep);
+  sd1.setStepMode(microstep);
 
   // Enable the motor outputs.
   
-  sd.enableDriver();
-  Serial.println("Driver enabled\n");
+  sd1.enableDriver();
+  Serial.println("Driver 1 enabled\n");
+
+
+
+
+  sd2.setChipSelectPin(CSPinM2); //when writing to a new CSPin, does this function set an already active CSPin low?
+  delay(1);
+  sd2.resetSettings();
+  sd2.clearStatus();
+  sd2.setDecayMode(HPSDDecayMode::AutoMixed);
+  sd2.setCurrentMilliamps36v4(2800); //4000 max
+  sd2.setStepMode(microstep);
+  sd2.enableDriver();
+  Serial.println("Driver 2 enabled\n");
+
+  
   
   pinMode(FaultPin, INPUT);
   pinMode(StallPin, INPUT);
+
+  threads.addThread(turn_degrees_M1, 360);
+  threads.addThread(turn_degrees_M2, -360);
 }
 
 void loop()
 {
-  //float t1 = millis();
-  turn_degrees(degreesM1);
-  /*
-  float t2 = millis();
-  float delta_t = (t2 - t1)/1000;
-  float rpm = (60/delta_t)*degreesM1/float(360);
-  Serial.print("seconds per rotation: ");
-  Serial.println(delta_t);
-  Serial.print("rpm: ");
-  Serial.println(rpm);
-  */
-  // Wait for 3 s
-  delay(3000);
 
-
-  //t1 = millis();
-  turn_degrees(-degreesM1);
-  /*
-  t2 = millis();
-  delta_t = (t2 - t1)/1000;
-  rpm = (60/delta_t)*degreesM1/float(360);
-  Serial.print("seconds per rotation: ");
-  Serial.println(delta_t);
-  Serial.print("rpm: ");
-  Serial.println(rpm);
-  */
-  // Wait for 3 s
-  delay(3000);
-  /*
-  Serial.print("Total time elapsed: ");
-  Serial.print(millis()/1000);
-  Serial.println(" seconds\n");
-  */
 }
 
-void turn_degrees(int degrees){
+void turn_degrees_M1(int degrees){
   double steps = abs(degrees/(degrees_per_step/(gear_ratio*microstep)));
   if(degrees>=0){
-    sd.setDirection(0);
+    sd1.setDirection(0);
   }
   else{
-    sd.setDirection(1);
+    sd1.setDirection(1);
   }
   //Serial.print("steps: ");
   //Serial.println(steps);
   for(unsigned int x = 0; x <= steps; x++)
   {
-    sd.step();
+    sd1.step();
+    delayMicroseconds(StepPeriodUs);
+  }
+  //Serial.print("Rotation #");
+  //Serial.println(rotations_counter);
+}
+
+void turn_degrees_M2(int degrees){
+  double steps = abs(degrees/(degrees_per_step/(gear_ratio*microstep)));
+  if(degrees>=0){
+    sd2.setDirection(0);
+  }
+  else{
+    sd2.setDirection(1);
+  }
+  //Serial.print("steps: ");
+  //Serial.println(steps);
+  for(unsigned int x = 0; x <= steps; x++)
+  {
+    sd2.step();
     //delay(StepPeriodMs); //use delayMicroseconds() for delays less than 1ms
     delayMicroseconds(StepPeriodUs);
   }

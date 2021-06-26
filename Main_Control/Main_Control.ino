@@ -31,7 +31,9 @@ const uint16_t StepPeriodMs = 1; //was 2
 
 bool isHomed=false;
 
-HighPowerStepperDriver sd;
+HighPowerStepperDriver drivers[4];
+
+Threads::Mutex stepLock;
 
 void recieve_command(){
   while(1){ 
@@ -41,12 +43,12 @@ void recieve_command(){
       switch(read_byte){
         case 0x1:
           send_msg("init cmd recieved", false);
-          init_all();
+          home_all();
           send_msg("init_all processed");
           break;
 
         case 0x2:
-          send_msg("align_cmd_recieved", false);
+          
           uint8_t degs[4];
           for(int i = 0; i < 4; i++){
             while(Serial.available() < 1){}
@@ -56,7 +58,7 @@ void recieve_command(){
           }
 
           align_all(degs);
-          
+          send_msg("align_cmd_recieved");
           break;
           
         case 0x6:
@@ -81,14 +83,14 @@ void recieve_command(){
   }
 }
 
-void init_all(){
+void home_all(){
   bool homed[4] = {false, false, false, false};
 
   while(std::accumulate(homed, homed + 4, 0) < 4){
     for(int i = 0; i < 4; i++){
       if(homed[i]==false){
         if(digitalRead(homingPins[i]) == 0){
-          turn_degrees(2, CSPins[i]);
+          threads.addThread(turn_degrees, new int[2]{2, i});
         }
         else{
           homed[i] = true;
@@ -101,17 +103,11 @@ void init_all(){
 }
 
 void align_all(uint8_t degs[]){
-  while(!twoArrEqual(degs, currentPositions)){
-    for(int i = 0; i < 4; i++){
-      if(degs[i]<currentPositions[i]){
-        turn_degrees(-1, CSPins[i]);
-        currentPositions[i]--;
-      }
-      else if(degs[i]>currentPositions[i]){
-        turn_degrees(1, CSPins[i]);
-        currentPositions[i]++;
-      }
-    }
+
+  for(int i = 0; i<4; i++){
+    threads.addThread(turn_degrees, new int[2]{degs[i]-currentPositions[i], i});
+
+    currentPositions[i] = degs[i];
   }
 }
 
@@ -121,44 +117,48 @@ void send_msg(String msg){
 
 void send_msg(String msg, bool terminate){
   if(!terminate){
-    Serial.print(msg);
+    Serial.print(msg + '\n');
   }
   else{
     Serial.print(msg + '\0');
   }
 }
 
-void turn_degrees(int degrees, int CSPin){
-  sd.setChipSelectPin(CSPin);
+void turn_degrees(int* args){
+  int degrees = args[0];
+  int driverNum = args[1];
   double steps = abs(degrees/(degrees_per_step/(gear_ratio*microstep)));
   if(degrees>=0){
-    sd.setDirection(0);
+    drivers[driverNum].setDirection(0);
   }
   else{
-    sd.setDirection(1);
+    drivers[driverNum].setDirection(1);
   }
   for(unsigned int x = 0; x <= steps; x++)
   {
-    sd.step();
+    drivers[driverNum].step();
     delayMicroseconds(StepPeriodUs);
   }
 }
 
-void init_drivers(int CSPin, int homingPin){
-    pinMode(homingPin, INPUT);
+
+void init_drivers(){
+  for(int i = 0; i < 4; i++){
+    pinMode(homingPins[i], INPUT);
   
-    sd.setChipSelectPin(CSPin); 
+    drivers[i].setChipSelectPin(CSPins[i]); 
     delay(1);
-    sd.resetSettings();
-    sd.clearStatus();
-    sd.setDecayMode(HPSDDecayMode::AutoMixed);
-    sd.setCurrentMilliamps36v4(2800); //4000 max
+    drivers[i].resetSettings();
+    drivers[i].clearStatus();
+    drivers[i].setDecayMode(HPSDDecayMode::AutoMixed);
+    drivers[i].setCurrentMilliamps36v4(2800); //4000 max
     double steps_approx = abs(degreesM1/(degrees_per_step/(gear_ratio*microstep)));
     double time_approx = (steps_approx*StepPeriodUs)/1000000;
     float rpm_approx = (60/time_approx)*degreesM1/float(360);  
-    sd.setStepMode(microstep);
+    drivers[i].setStepMode(microstep);
     
-    sd.enableDriver();
+    drivers[i].enableDriver();
+  }
 }
 
 void setup() {
@@ -175,9 +175,7 @@ void setup() {
   pinMode(sleepPin, OUTPUT);
   digitalWrite(sleepPin, HIGH);
 
-  for(int i = 0; i < 4; i++){
-    init_drivers(CSPins[i], homingPins[i]);
-  }
+  init_drivers();
   
 //  pinMode(FaultPin, INPUT);
 //  pinMode(StallPin, INPUT);
@@ -196,6 +194,5 @@ bool twoArrEqual(uint8_t arr1[], uint8_t arr2[])
 
 void loop() {
   // put your main code here, to run repeatedly:
-  Serial.println("waiting on command");
   recieve_command();
 }
